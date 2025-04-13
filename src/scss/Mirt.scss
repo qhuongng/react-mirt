@@ -20,7 +20,8 @@
   text-align: center;
   width: $button-width;
   background-color: $background-color;
-  border-right-color: $button-border-color;
+  border-color: $button-border-color;
+  border-style: solid;
   border-width: 0.125rem;
   background-color: #333;
   border-radius: $border-radius;
@@ -49,6 +50,9 @@
   flex-grow: 1;
   overflow: hidden;
   background-color: #333;
+  border-color: $button-border-color;
+  border-width: 0.125rem;
+  border-style: solid;
   border-radius: $border-radius;
 }
 
@@ -308,7 +312,7 @@
   border-left-width: $handle-width;
   border-style: solid;
   border-color: $frame-color;
-  border-radius: $border-radius;
+  border-radius: $frame-border-radius;
   transition: left $handle-transition-duration ease, right $handle-transition-duration ease;
 
   &.mirt__handle-frame--start-dragging {
