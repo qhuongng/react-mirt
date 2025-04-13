@@ -24,6 +24,7 @@ export interface MirtOptions {
   waveformLoading: boolean;
   fineTuningDelay: number;
   fineTuningScale: number;
+  maxDuration: number; // Maximum duration in seconds (0 means no limit)
 }
 
 const defaultOptions: MirtOptions = {
@@ -34,6 +35,7 @@ const defaultOptions: MirtOptions = {
   waveformLoading: false,
   fineTuningDelay: 500,
   fineTuningScale: 5,
+  maxDuration: 0, // Default to no limit
 };
 
 const Mirt = ({
@@ -70,6 +72,37 @@ const Mirt = ({
   const [fineTuning, setFineTuning] = useState(-1);
 
   const fineTuningResolution = duration / config.fineTuningScale;
+
+  // Convert maxDuration from seconds to milliseconds for internal use
+  const maxDurationMs = config.maxDuration * 1000;
+
+  // Helper function to enforce max duration constraint
+  const enforceMaxDuration = (start: number, end: number): { start: number; end: number } => {
+    if (config.maxDuration <= 0) return { start, end }; // No limit applied
+
+    const currentDuration = end - start;
+    const maxAllowedDuration = maxDurationMs;
+
+    if (currentDuration <= maxAllowedDuration) {
+      return { start, end }; // Within limits
+    }
+
+    // If exceeding max duration, adjust based on which handle is being dragged
+    if (startDragging) {
+      // When dragging start handle, keep end fixed and adjust start
+      return { start: end - maxAllowedDuration, end };
+    } else {
+      // When dragging end handle or initializing, keep start fixed and adjust end
+      return { start, end: start + maxAllowedDuration };
+    }
+  };
+
+  // Helper function to ensure playhead is within valid range
+  const ensurePlayheadInRange = (playhead: number, start: number, end: number): number => {
+    if (playhead < start) return start;
+    if (playhead > end) return end;
+    return playhead;
+  };
 
   useEffect(() => {
     setInitialized(false);
@@ -197,14 +230,22 @@ const Mirt = ({
 
     const durationInMilliseconds = audio.duration * 1000;
 
-    setStartPosition(0);
-    setPlayheadPosition(0);
-    setEndPosition(durationInMilliseconds);
+    let initialStart = 0;
+    let initialEnd = durationInMilliseconds;
+
+    // Apply max duration constraint on initialization if needed
+    if (config.maxDuration > 0 && durationInMilliseconds > maxDurationMs) {
+      initialEnd = initialStart + maxDurationMs;
+    }
+
+    setStartPosition(initialStart);
+    setPlayheadPosition(initialStart);
+    setEndPosition(initialEnd);
     setDuration(durationInMilliseconds);
     setInitialized(true);
 
     if (onChange) {
-      onChange({ start: 0, current: 0, end: durationInMilliseconds });
+      onChange({ start: initialStart, current: initialStart, end: initialEnd });
     }
   };
 
@@ -268,6 +309,24 @@ const Mirt = ({
       return;
     }
 
+    // Apply max duration constraint
+    if (config.maxDuration > 0) {
+      const adjusted = enforceMaxDuration(value, endPosition);
+      const newStartPosition = adjusted.start;
+
+      // Update the audio position
+      audio.currentTime = toSeconds(newStartPosition);
+
+      // Update the start position
+      setStartPosition(newStartPosition);
+
+      // Ensure playhead stays within the valid range
+      const adjustedPlayhead = ensurePlayheadInRange(playheadPosition, newStartPosition, adjusted.end);
+      setPlayheadPosition(adjustedPlayhead);
+
+      return;
+    }
+
     audio.currentTime = toSeconds(value);
     setStartPosition(value);
     setPlayheadPosition(value);
@@ -302,18 +361,6 @@ const Mirt = ({
     const value = parseInt(event.target.value);
 
     changeEndPosition(value);
-
-    if (value < startPosition) {
-      setPlayheadPosition(startPosition);
-      return;
-    }
-
-    if (value > duration) {
-      setPlayheadPosition(duration);
-      return;
-    }
-
-    setPlayheadPosition(value);
   };
 
   const changeEndPosition = (value: number) => {
@@ -322,17 +369,45 @@ const Mirt = ({
     if (value < startPosition) {
       audio.currentTime = toSeconds(startPosition);
       setEndPosition(startPosition);
+      // Ensure playhead is at start position
+      setPlayheadPosition(startPosition);
       return;
     }
 
     if (value > duration) {
       audio.currentTime = toSeconds(duration);
       setEndPosition(duration);
+      // Ensure playhead respects new end position if necessary
+      const adjustedPlayhead = ensurePlayheadInRange(playheadPosition, startPosition, duration);
+      setPlayheadPosition(adjustedPlayhead);
+      return;
+    }
+
+    // Apply max duration constraint
+    if (config.maxDuration > 0) {
+      const adjusted = enforceMaxDuration(startPosition, value);
+      const newEndPosition = adjusted.end;
+
+      // Update the audio position
+      audio.currentTime = toSeconds(Math.min(playheadPosition, newEndPosition));
+
+      // Update the end position
+      setEndPosition(newEndPosition);
+
+      // Ensure playhead stays within the valid range
+      const adjustedPlayhead = ensurePlayheadInRange(playheadPosition, startPosition, newEndPosition);
+      setPlayheadPosition(adjustedPlayhead);
+
       return;
     }
 
     audio.currentTime = toSeconds(value);
     setEndPosition(value);
+
+    // Ensure playhead respects new end position if necessary
+    if (playheadPosition > value) {
+      setPlayheadPosition(value);
+    }
   };
 
   const handleButtonClick = () => {
