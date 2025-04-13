@@ -30,7 +30,7 @@
     "dev": "rollup -c -w",
     "build": "rollup -c",
     "semantic-release": "semantic-release",
-    "prepare": "npm install && npm run build"
+    "prepare": "npm run build"
   },
   "dependencies": {
     "classnames": "^2.3.1"
